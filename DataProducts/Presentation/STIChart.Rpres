@@ -1,0 +1,58 @@
+Welcome to STIChart
+========================================================
+author: Lawrence Zheng
+date: 15 Nov 2014
+
+What is STIChart?
+========================================================
+
+STIChart [Application](https://lawtee.shinyapps.io/STIChart/) charts the history of the Singapore Straits Times Index.
+
+How cool is that? Select the dates and the chart will magically appear....
+
+![Select](./image/selectDate.jpg)
+
+
+Sample Chart
+========================================================
+
+![Example](./image/chart.png)
+
+STIChart also calculates the Average of the Index
+
+![Example](./image/indexAverage.png)
+
+How does STIChart calculate the average of the index?
+========================================================
+
+server.R   
+
+```{r}
+
+library(quantmod)
+
+#Specify the range through the inputs from the UI
+input1 <- "2014-11-10"
+input2 <- "2014-11-14"
+
+#Obtaining the Data from Yahoo
+stockData <- getSymbols("^STI", src = "yahoo", 
+           from = input1,
+           to = input2,
+           auto.assign = FALSE)
+
+# the mean is transfered to the UI using output$stockAverage
+mean(stockData$STI.Close)
+
+```
+The End
+========================================================     
+    
+    
+Thank You.   
+
+Hope you enjoyed the presentation.    
+   
+   
+Reference:    
+[Use reactive expressions](http://shiny.rstudio.com/tutorial/lesson6/) 

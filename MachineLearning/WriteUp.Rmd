@@ -1,0 +1,167 @@
+---
+title: "Machine Learning on devices such as Jawbone Up, Nike FuelBand, and Fitbit to predict human activity recognition(i.e sitting-down, standing-up, standing, walking, and sitting)"
+author: "lawtee"
+date: "Wednesday, November 19, 2014"
+output: html_document
+---
+   
+#Introduction   
+   
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+   
+#Getting and cleaning Data   
+
+```{r, results='hide',message=F, warning=F}
+#Packages
+library(caret)
+library(randomForest)
+library(gbm) #boosting with trees
+library(klaR) #naive Bayes
+library(doParallel)
+
+#DoParallel processing
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+#Download data
+#download.file(destfile="./pml-training.csv" ,"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" ,method = "auto")
+
+#Unzip file
+pmlData <- read.csv("./pml-training.csv",header = TRUE,  na.strings=c("NA","")) 
+
+#Data Cleaning
+  #Remove unnecessary columns
+  pmlData <- subset( pmlData, select = -c(X , user_name , raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window ) )
+  
+  #Get indices of data.frame columns with low variance
+  badCols <- nearZeroVar(pmlData)
+  # remove those "bad" columns from the training and cross-validation sets
+  pmlData <- pmlData[, -badCols]
+  
+  #Remove those 90% NA
+  countNA <- apply(pmlData,2,function(x) {sum(is.na(x))})
+  countRow <- nrow(pmlData)
+  NoOfAcceptableNA <- countRow * 0.9
+  pmlData <- pmlData[,which(countNA <= NoOfAcceptableNA)];
+
+```
+   
+#Exploratory Data Analysis   
+  
+```{r}
+  str(pmlData)  
+      
+  #Each Classe
+  table(pmlData$classe)
+```
+   
+#Machine Learning, Train and Predict   
+   
+```{r, echo=FALSE}
+set.seed(32343)
+```
+
+Split the Data into Training (60%) and Testing (40%) dataset   
+   
+```{r}
+inTrain <- createDataPartition(y=pmlData$classe, p=0.60, list=FALSE)
+training <- pmlData[inTrain,]
+testing <- pmlData[-inTrain,]
+```   
+
+Machine Learning: Train 3 different type of model and select the most accurate model for validation    
+1. Randomn Forest   
+2. Boosting with Trees    
+3. Naive Bayes   
+
+```{r}
+#Set trainControl: Resampling method: cv , number of folds/resampling iterations=4 and ParallelProcessing=TRUE
+trainControl = trainControl(method = "cv", number = 4, allowParallel =TRUE);
+```
+
+####1. Random Forest Models   
+```{r,cache=TRUE, results='hide', warning=F}
+#Train
+modelFitRF <- train(training$classe ~ . , method="rf", trControl=trainControl, data=training)
+#Predict
+predRF <- predict(modelFitRF, testing)
+```
+```{r,cache=TRUE}
+#Prediction Result  
+confusionMatrix(predRF, testing$classe)
+```   
+
+####2. Boosting with Trees Models   
+```{r,cache=TRUE, results='hide', warning=F}
+#Train
+modelFitGLB <- train(training$classe ~ . , method="gbm", trControl=trainControl, data=training)
+#Predict
+predGLB <- predict(modelFitGLB, testing) 
+```
+```{r,cache=TRUE}
+#Prediction Result  
+confusionMatrix(predGLB, testing$classe)
+```  
+
+####3. Naive Bayes Models   
+```{r,cache=TRUE, results='hide', warning=F}
+#Train
+modelFitNB <- train(training$classe ~ . , method="nb", trControl=trainControl, data=training)
+#Predict
+predNB <- predict(modelFitNB, testing) 
+```
+```{r,cache=TRUE}
+#Prediction Result  
+confusionMatrix(predNB, testing$classe)
+```  
+
+From the results, Random Forest Model produces the most accurate prediction therefore it is selected to perform the data validation.
+
+#Data Validation - Using Random Forest Model    
+
+```{r,cache=TRUE}
+#download.file(destfile="./pml-testing.csv" ,"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" ,method = "auto")
+
+validationData <- read.csv("./pml-testing.csv",header = TRUE ,  na.strings=c("NA",""))
+
+#Predict
+predVAL <- predict(modelFitRF, validationData) 
+
+#Creating of the Uploading Files
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predVAL)
+
+```  
+
+#Expected out of sample error to be and estimate the error appropriately with cross-validation
+    
+For the Random Forest Model, the expected out of sample error is 1 - 0.987 (1 - mtry=27,Accuracy) = 0.013
+    
+```{r}
+modelFitRF
+```
+    
+For the Random Forest Model, the estimated error is 1-0.993 (1 - OverallStatistics,Accuracy ) = 0.007.   
+   
+```{r}
+confusionMatrix(predRF, testing$classe)
+```
+
+#Conclusion   
+   
+Among the 3 Models that were used to predict human activity recognition, Random Forest Model produces the most accurate results of 99.31% . Therefore it was used to predict the 20 test cases.
+   
+   
+#References   
+[Data Source](http://groupware.les.inf.puc-rio.br/har)    
+[Remove Variance Column](https://gist.github.com/bdewilde/3965255)     
+[doParallel Package](http://cran.r-project.org/web/packages/doParallel/doParallel.pdf)    
